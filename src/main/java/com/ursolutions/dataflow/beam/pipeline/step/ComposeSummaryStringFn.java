@@ -2,7 +2,6 @@ package com.ursolutions.dataflow.beam.pipeline.step;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.beam.sdk.transforms.DoFn;
-import org.apache.beam.sdk.transforms.View;
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollectionView;
 import org.checkerframework.checker.initialization.qual.Initialized;
@@ -39,7 +38,7 @@ public class ComposeSummaryStringFn extends DoFn<KV<String, Integer>, String> {
         resultOut.append(maxValue).append(",");
         resultOut.append(quantity);
 
-        log.info("the result is -> {}", resultOut);
+        log.info("the result is -> {}", resultOut.toString());
         context.output(resultOut.toString());
     }
 }

@@ -15,7 +15,7 @@ public class CloudRunnerMain {
         initialOptions.setStreaming(true);
         Pipeline pipeline = new LetterNumberPipelineFactory().build(initialOptions);
         log.info("Main Run");
-        pipeline.run();
+        pipeline.run().waitUntilFinish();
         log.info("Main END");
     }
 

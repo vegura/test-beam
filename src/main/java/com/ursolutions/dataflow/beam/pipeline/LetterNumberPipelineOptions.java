@@ -36,9 +36,4 @@ public interface LetterNumberPipelineOptions extends DataflowPipelineOptions {
     @Default.Integer(1000)
     Integer getWindowElementsSizeLimit();
     void setWindowElementsSizeLimit(Integer windowElementsSizeLimit);
-
-    @Description("Pub/Sub max batch size ")
-    @Default.Integer(10)
-    Integer getPubSubMaxBatchSize();
-    void setPubSubMaxBatchSize(Integer pubSubMaxBatchSize);
 }
