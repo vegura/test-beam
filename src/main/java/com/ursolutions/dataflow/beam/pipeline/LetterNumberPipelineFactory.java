@@ -12,8 +12,9 @@ import org.apache.beam.sdk.transforms.Max;
 import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.transforms.Sum;
 import org.apache.beam.sdk.transforms.Values;
-import org.apache.beam.sdk.transforms.windowing.AfterWatermark;
+import org.apache.beam.sdk.transforms.windowing.AfterProcessingTime;
 import org.apache.beam.sdk.transforms.windowing.FixedWindows;
+import org.apache.beam.sdk.transforms.windowing.Repeatedly;
 import org.apache.beam.sdk.transforms.windowing.Window;
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
@@ -27,10 +28,13 @@ import java.io.Serializable;
 
 @Slf4j
 public class LetterNumberPipelineFactory implements Serializable {
+
+    private static final Long DURATION = 60L;
+
     public Pipeline build(LetterNumberPipelineOptions options) {
         log.info("Building pipeline");
         Pipeline pipeline = Pipeline.create(options);
-        PCollection<KV<String, Integer>> letterNumberCollection = convertToKeyValueWithWindowing(
+        PCollection<KV<String, Integer>> letterNumberCollection = readToKeyValue(
                 options.getInputSubscription(),
                 pipeline);
 
@@ -40,6 +44,7 @@ public class LetterNumberPipelineFactory implements Serializable {
         PCollection<Integer> aggregationCollectionOfValues = letterNumberCollection.apply(Values.create());
         PCollectionView<Long> countAll = aggregationCollectionOfValues
                 .apply(Combine.globally(Count.<Integer>combineFn()).asSingletonView());
+
         PCollectionView<Integer> maxBetweenAll = aggregationCollectionOfValues
                 .apply(Combine.globally(Max.ofIntegers()).asSingletonView());
 
@@ -50,19 +55,21 @@ public class LetterNumberPipelineFactory implements Serializable {
         return pipeline;
     }
 
-    private PCollection<KV<String, Integer>> convertToKeyValueWithWindowing(ValueProvider<String> subscription,
-                                                                            Pipeline pipeline) {
+    private PCollection<KV<String, Integer>> readToKeyValue(ValueProvider<String> subscription,
+                                                            Pipeline pipeline) {
         return pipeline
                 .apply("Fetch and convert the data",
                     PubsubIO.readStrings()
                             .withTimestampAttribute("timestamp_ms")
                             .fromSubscription(subscription))
-                .apply("Perform windowing", Window.<String>into(
-                        FixedWindows.of(Duration.standardMinutes(1)))
-                        .triggering(AfterWatermark.pastEndOfWindow())
+                .apply("convert to key-value format", ParDo.of(new ParseKeyValueFn()))
+                .apply("Perform windowing", Window.<KV<String, Integer>>into(
+                        FixedWindows.of(Duration.standardSeconds(DURATION)))
+                        .triggering(Repeatedly.forever(
+                                AfterProcessingTime.pastFirstElementInPane().plusDelayOf(Duration.standardSeconds(DURATION))))
                         .withAllowedLateness(Duration.ZERO)
-                        .accumulatingFiredPanes())
-                .apply("convert to key-value format", ParDo.of(new ParseKeyValueFn()));
+                        .discardingFiredPanes());
+
     }
 
     private PCollection<KV<String, Integer>> applySumForLetter(PCollection<KV<String, Integer>> letterNumberCollection) {
@@ -72,8 +79,16 @@ public class LetterNumberPipelineFactory implements Serializable {
     private PCollection<String> composeSummary(PCollection<KV<String, Integer>> summedNumberCollection,
                                                PCollectionView<Integer> max,
                                                PCollectionView<@UnknownKeyFor @NonNull @Initialized Long> count) {
-        return summedNumberCollection.apply("Generate summary for each row",
-                ParDo.of(new ComposeSummaryStringFn(max, count)).withSideInputs(max, count));
+        return summedNumberCollection
+                .apply("Perform windowing", Window.<KV<String, Integer>>into(
+                        FixedWindows.of(Duration.standardSeconds(DURATION)))
+                        .triggering(Repeatedly.forever(
+                                AfterProcessingTime.pastFirstElementInPane()
+                                        .plusDelayOf(Duration.standardSeconds(DURATION + 15))))
+                        .withAllowedLateness(Duration.ZERO)
+                        .discardingFiredPanes())
+                .apply("Generate summary for each row",
+                    ParDo.of(new ComposeSummaryStringFn(max, count)).withSideInputs(max, count));
     }
 
     private void writeSummaryCollection(PCollection<String> composeSummary,
