@@ -34,7 +34,7 @@ public class LetterNumberPipelineFactory implements Serializable {
     public Pipeline build(LetterNumberPipelineOptions options) {
         log.info("Building pipeline");
         Pipeline pipeline = Pipeline.create(options);
-        PCollection<KV<String, Integer>> letterNumberCollection = readToKeyValue(
+        PCollection<KV<String, Integer>> letterNumberCollection = readAsKeyValue(
                 options.getInputSubscription(),
                 pipeline);
 
@@ -55,15 +55,15 @@ public class LetterNumberPipelineFactory implements Serializable {
         return pipeline;
     }
 
-    private PCollection<KV<String, Integer>> readToKeyValue(ValueProvider<String> subscription,
+    private PCollection<KV<String, Integer>> readAsKeyValue(ValueProvider<String> subscription,
                                                             Pipeline pipeline) {
         return pipeline
                 .apply("Fetch and convert the data",
                     PubsubIO.readStrings()
                             .withTimestampAttribute("timestamp_ms")
                             .fromSubscription(subscription))
-                .apply("convert to key-value format", ParDo.of(new ParseKeyValueFn()))
-                .apply("Perform windowing", Window.<KV<String, Integer>>into(
+                .apply("Convert input to key-value format", ParDo.of(new ParseKeyValueFn()))
+                .apply("Perform windowing for input", Window.<KV<String, Integer>>into(
                         FixedWindows.of(Duration.standardSeconds(DURATION)))
                         .triggering(Repeatedly.forever(
                                 AfterProcessingTime.pastFirstElementInPane().plusDelayOf(Duration.standardSeconds(DURATION))))
@@ -80,7 +80,7 @@ public class LetterNumberPipelineFactory implements Serializable {
                                                PCollectionView<Integer> max,
                                                PCollectionView<@UnknownKeyFor @NonNull @Initialized Long> count) {
         return summedNumberCollection
-                .apply("Perform windowing", Window.<KV<String, Integer>>into(
+                .apply("Perform windowing for summed per key values", Window.<KV<String, Integer>>into(
                         FixedWindows.of(Duration.standardSeconds(DURATION)))
                         .triggering(Repeatedly.forever(
                                 AfterProcessingTime.pastFirstElementInPane()
