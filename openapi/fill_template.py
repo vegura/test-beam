@@ -50,8 +50,11 @@ def generate_according_to_type(param):
         if linked_schema_type not in BASIC_TYPES:
             return
 
-        parameters["examples"][EXAMPLE_NAME] = {
-            value: generate_example_by_type(linked_schema_type)
+        if "examples" not in param:
+            param["examples"] = {}
+        
+        param["examples"][EXAMPLE_NAME] = {
+            "value": generate_example_by_type(linked_schema_type)
         }
 
 
